@@ -1,0 +1,50 @@
+#!/bin/sh
+
+# Setup Certificate Authority
+# Generate an Offline RootCA and SubCA on single node for devtest. 
+# A real-world setup would use different systems and transport the public components using an intermediary file system or queue.
+# DO NOT USE FOR PRODUCTION
+#
+# Arguments: 
+#     N/A
+#
+# Example usage: setup-ca
+#
+# Assumptions: easyrsa v3 installed, openssl installed
+
+# Set variables
+_EASYRSA_DATA_ROOT_PATH="/.easyrsa"
+_EASYRSA_CONFIG_PATH="${_EASYRSA_DATA_ROOT_PATH}/config"
+
+_PKI_PATH="${_EASYRSA_DATA_ROOT_PATH}/pki"
+_ROOTCA_PATH="${_PKI_PATH}/offline-rootca"
+_SUBCA_PATH="${_PKI_PATH}/subca"
+
+_EASYRSA_ROOTCA_VARS_FILE="${_EASYRSA_CONFIG_PATH}/rootca-vars"
+_EASYRSA_SUBCA_VARS_FILE="${_EASYRSA_CONFIG_PATH}/subca-vars"
+
+# Put easyrsa app on PATH so that it can be called from anywhere
+# PATH=/easy-rsa:$PATH
+
+# Build root CA
+easyrsa --vars=$_EASYRSA_ROOTCA_VARS_FILE init-pki
+dd if=/dev/urandom of=$_ROOTCA_PATH/.rnd bs=256 count=1
+easyrsa --vars=$_EASYRSA_ROOTCA_VARS_FILE build-ca nopass
+
+# Build sub-CA request
+easyrsa --vars=$_EASYRSA_SUBCA_VARS_FILE init-pki
+dd if=/dev/urandom of=$_SUBCA_PATH/.rnd bs=256 count=1
+easyrsa --vars=$_EASYRSA_SUBCA_VARS_FILE build-ca nopass subca
+
+# Import the sub-CA request under the short-name "sub" on the offline PKI
+easyrsa --vars=$_EASYRSA_ROOTCA_VARS_FILE import-req $_SUBCA_PATH/reqs/ca.req subca
+
+# Then sign the sub-CA request as a CA
+easyrsa --vars=$_EASYRSA_ROOTCA_VARS_FILE sign-req ca subca
+
+# Transport sub-CA cert to subca PKI
+cp $_ROOTCA_PATH/issued/subca.crt $_SUBCA_PATH/ca.crt
+
+# Make server and client bundles directories in SubCA path
+mkdir -p $_SUBCA_PATH/bundles/client
+mkdir -p $_SUBCA_PATH/bundles/server

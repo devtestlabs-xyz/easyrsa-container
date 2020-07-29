@@ -1,0 +1,38 @@
+#!/bin/sh
+
+# Generate Certificate Bundle
+# Arguments: 
+#     REQ_TYPE="client" or "server"
+#     COMMON_NAME=fully-qualified email address for client cert or fully-qualified server name for server cert
+#
+# Example usage: generate-cert-bundle server someserver.example.net
+#                generate-cert-bundle client me@example.net
+#
+# Assumptions: easyrsa v3 installed, openssl installed
+
+# Set variables
+_EASYRSA_DATA_ROOT_PATH="/.easyrsa"
+_EASYRSA_CONFIG_PATH="${_EASYRSA_DATA_ROOT_PATH}/config"
+
+_PKI_PATH="${_EASYRSA_DATA_ROOT_PATH}/pki"
+_ROOTCA_PATH="${_PKI_PATH}/offline-rootca"
+_SUBCA_PATH="${_PKI_PATH}/subca"
+
+_EASYRSA_ROOTCA_VARS_FILE="${_EASYRSA_CONFIG_PATH}/rootca-vars"
+_EASYRSA_SUBCA_VARS_FILE="${_EASYRSA_CONFIG_PATH}/subca-vars"
+
+# Put easyrsa app on PATH so that it can be called from anywhere
+# PATH=/easy-rsa:$PATH
+
+# Arguments
+REQ_TYPE_=$1
+COMMON_NAME_=$2
+
+# Generate and sign requests on the SubCA.
+# Real-world use should import a CSR from the actual clients. We don't for brevity here.
+easyrsa --vars=$_EASYRSA_SUBCA_VARS_FILE gen-req $COMMON_NAME_ nopass
+easyrsa --vars=$_EASYRSA_SUBCA_VARS_FILE sign-req $REQ_TYPE_ $COMMON_NAME_
+
+# Finally, create "bundle" files for use at each resource (ie: server or client node.)
+cat $_SUBCA_PATH/issued/$COMMON_NAME_.crt $_SUBCA_PATH/ca.crt > $_SUBCA_PATH/bundles/$REQ_TYPE_/$COMMON_NAME_-bundle.crt
+echo "Certificate bundle created at: ${_SUBCA_PATH}/bundles/${REQ_TYPE_}/${COMMON_NAME_}-bundle.crt"
